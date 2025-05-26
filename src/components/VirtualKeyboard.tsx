@@ -48,14 +48,21 @@ const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
     const isPressed = pressedKey === key.toLowerCase();
     const isCurrentFinger = finger === currentFinger;
 
-    let baseClasses = "flex items-center justify-center rounded-lg border-2 transition-all duration-200 font-medium text-sm";
+    // Base classes for all keys with a smooth transition
+    let baseClasses = "flex items-center justify-center rounded-lg border-2 transition-all duration-300 font-medium text-sm";
     
+    // Custom animation for pressed keys
     if (isPressed) {
       return cn(baseClasses, "bg-purple-500 border-purple-600 text-white transform scale-95 shadow-lg");
     }
     
+    // Custom animation for highlighted keys with slower pulsing
     if (isHighlighted) {
-      return cn(baseClasses, "bg-gradient-to-r from-purple-400 to-blue-400 border-purple-500 text-white shadow-lg animate-pulse");
+      return cn(
+        baseClasses, 
+        "bg-gradient-to-r from-purple-400 to-blue-400 border-purple-500 text-white shadow-lg",
+        "animate-pulse [animation-duration:1s]"
+      );
     }
     
     if (isCurrentFinger && finger) {

@@ -8,42 +8,125 @@ import { ArrowLeft, RotateCcw, Play, Pause, Trophy, Target, Zap, Clock } from 'l
 import VirtualKeyboard from './VirtualKeyboard';
 import { lessonData } from '@/data/lessons';
 
+interface LessonStats {
+  wpm: number;
+  accuracy: number;
+  lessonsCompleted: number;
+  totalTime: number;
+}
+
 interface TypingLessonProps {
   lessonId: number;
   onBack: () => void;
-  onStatsUpdate: (stats: any) => void;
+  onStatsUpdate: (stats: LessonStats) => void;
 }
 
 const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUpdate }) => {
-  const [currentPhrase, setCurrentPhrase] = useState('');
-  const [userInput, setUserInput] = useState('');
+  // State for the current lesson and phrases
+  const lesson = lessonData[lessonId] || lessonData[0];
+  const phrases = lesson.phrases;
+  
+  // Refs for values that don't trigger re-renders
+  const isActiveRef = React.useRef<boolean>(false);
+  const startTimeRef = React.useRef<number | null>(null);
+  const currentPhraseIndexRef = React.useRef<number>(0);
+  const userInputRef = React.useRef<string>('');
+  
+  // Component state
   const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0);
+  const [currentPhrase, setCurrentPhrase] = useState(phrases[0]);
+  const [userInput, setUserInput] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [errors, setErrors] = useState(0);
   const [wpm, setWpm] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
-  const [currentKey, setCurrentKey] = useState('');
+  const [currentKey, setCurrentKey] = useState(phrases[0]?.[0] || '');
   const [pressedKey, setPressedKey] = useState('');
 
-  const lesson = lessonData[lessonId] || lessonData[0];
-  const phrases = lesson.phrases;
+  // Update refs when state changes
+  React.useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
+  
+  React.useEffect(() => {
+    startTimeRef.current = startTime;
+  }, [startTime]);
+  
+  React.useEffect(() => {
+    currentPhraseIndexRef.current = currentPhraseIndex;
+  }, [currentPhraseIndex]);
+  
+  React.useEffect(() => {
+    userInputRef.current = userInput;
+  }, [userInput]);
 
-  useEffect(() => {
-    setCurrentPhrase(phrases[currentPhraseIndex]);
+  // Derived state
+  const isCompleted = userInput.length >= currentPhrase.length && currentPhrase.length > 0;
+  const progress = (userInput.length / currentPhrase.length) * 100;
+
+  // Initialize or update current phrase when index changes
+  React.useEffect(() => {
+    const newPhrase = phrases[currentPhraseIndex];
+    setCurrentPhrase(newPhrase);
+    setUserInput('');
+    setErrors(0);
+    setIsActive(false);
+    setStartTime(null);
+    setCurrentKey(newPhrase?.[0] || '');
   }, [currentPhraseIndex, phrases]);
+  
+  // Handle starting the lesson
+  const startLesson = React.useCallback(() => {
+    if (!isActiveRef.current) {
+      setIsActive(true);
+      const now = Date.now();
+      setStartTime(now);
+      startTimeRef.current = now;
+    }
+  }, []); // No dependencies since we use refs
+  
+  // Handle moving to next phrase or completing the lesson
+  const nextPhrase = React.useCallback(() => {
+    if (currentPhraseIndexRef.current < phrases.length - 1) {
+      // Move to next phrase
+      setCurrentPhraseIndex(prev => {
+        const nextIndex = prev + 1;
+        currentPhraseIndexRef.current = nextIndex;
+        return nextIndex;
+      });
+    } else {
+      // Lesson completed
+      const stats: LessonStats = {
+        wpm: wpm,
+        accuracy: accuracy,
+        lessonsCompleted: lessonId + 1,
+        totalTime: startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0
+      };
+      onStatsUpdate(stats);
+      onBack();
+    }
+  }, [phrases.length, wpm, accuracy, lessonId, onStatsUpdate, onBack]);
 
-  const calculateStats = useCallback(() => {
-    if (!startTime) return;
+  const calculateStats = React.useCallback(() => {
+    const currentStartTime = startTimeRef.current;
+    if (!currentStartTime) return;
     
-    const timeElapsed = (Date.now() - startTime) / 1000 / 60; // minutes
-    const wordsTyped = userInput.length / 5; // standard word = 5 characters
+    const timeElapsed = (Date.now() - currentStartTime) / 1000 / 60; // minutes
+    const currentInput = userInputRef.current;
+    const wordsTyped = currentInput.trim().split(/\s+/).length;
     const currentWpm = Math.round(wordsTyped / timeElapsed) || 0;
-    const currentAccuracy = userInput.length > 0 ? Math.round(((userInput.length - errors) / userInput.length) * 100) : 100;
+    const currentAccuracy = Math.max(0, Math.round(((currentInput.length - errors) / (currentInput.length || 1)) * 100));
     
     setWpm(currentWpm);
     setAccuracy(currentAccuracy);
-  }, [startTime, userInput.length, errors]);
+  }, [errors]); // Only depends on errors since we use refs for other values
+
+  useEffect(() => {
+    if (isActive && userInput.length > 0) {
+      calculateStats();
+    }
+  }, [userInput, isActive, calculateStats]);
 
   useEffect(() => {
     if (isActive) {
@@ -52,39 +135,105 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
     }
   }, [isActive, calculateStats]);
 
-  const handleKeyPress = useCallback((event: KeyboardEvent) => {
-    if (!isActive) return;
-    
-    event.preventDefault();
+  // Handle keyboard input
+  const handleKeyPress = React.useCallback((event: KeyboardEvent) => {
     const key = event.key;
+    const isLessonActive = isActiveRef.current;
+    const currentInput = userInputRef.current;
+    const currentPhraseText = currentPhrase; // Get current phrase from closure
     
-    setPressedKey(key.toLowerCase());
-    setTimeout(() => setPressedKey(''), 150);
+    // Handle Enter key for starting/continuing
+    if (key === 'Enter') {
+      event.preventDefault();
+      
+      if (!isLessonActive) {
+        // Start the lesson if not active
+        startLesson();
+        // Add the first character if it's Enter
+        if (currentPhraseText[0] === '\n') {
+          setUserInput('\n');
+        }
+      } else if (currentInput.length >= currentPhraseText.length) {
+        // Move to next phrase if current is completed
+        nextPhrase();
+      }
+      return;
+    }
+
+    // If not active and user types the first character
+    if (!isLessonActive) {
+      if (key === currentPhraseText[0] || 
+          (key === ' ' && currentPhraseText[0] === ' ')) {
+        event.preventDefault();
+        startLesson();
+        // Add the first character
+        setUserInput(key);
+      }
+      return;
+    }
     
+    // Ignore key presses if not active or lesson completed
+    if (!isLessonActive || currentInput.length >= currentPhraseText.length) {
+      return;
+    }
+    
+    // Handle backspace
     if (key === 'Backspace') {
+      event.preventDefault();
       setUserInput(prev => prev.slice(0, -1));
       return;
     }
     
-    if (key.length !== 1) return; // Ignore special keys
+    // Ignore other special keys except space
+    if (key.length !== 1 && key !== ' ') return;
     
-    const expectedChar = currentPhrase[userInput.length];
+    event.preventDefault();
     
-    if (key === expectedChar) {
-      setUserInput(prev => prev + key);
-    } else {
+    // Visual feedback for key press
+    setPressedKey(key.toLowerCase());
+    setTimeout(() => setPressedKey(''), 150);
+    
+    // Process the typed character
+    const expectedChar = currentPhraseText[currentInput.length];
+    const isCorrect = key === expectedChar;
+    
+    // Update user input
+    setUserInput(prev => {
+      const newInput = prev + key;
+      
+      // If we've reached the end of the phrase, mark as completed
+      if (newInput.length >= currentPhraseText.length) {
+        setTimeout(() => {
+          if (newInput.length === currentPhraseText.length) {
+            nextPhrase();
+          }
+        }, 100);
+      }
+      
+      return newInput;
+    });
+    
+    // Update errors if needed
+    if (!isCorrect) {
       setErrors(prev => prev + 1);
-      // Still add the character but mark it as error
-      setUserInput(prev => prev + key);
     }
-  }, [isActive, currentPhrase, userInput.length]);
+  }, [currentPhrase, startLesson, nextPhrase]);
 
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => handleKeyPress(e);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [handleKeyPress]);
+  
+  // Focus the container on mount for keyboard events
+  React.useEffect(() => {
+    const container = document.getElementById('typing-container');
+    if (container) {
+      container.focus();
+    }
+  }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (userInput.length < currentPhrase.length) {
       setCurrentKey(currentPhrase[userInput.length]);
     } else {
@@ -92,45 +241,20 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
     }
   }, [userInput, currentPhrase]);
 
-  const startLesson = () => {
-    setIsActive(true);
-    setStartTime(Date.now());
-  };
-
   const pauseLesson = () => {
     setIsActive(false);
   };
 
-  const restartLesson = () => {
+  const restartLesson = React.useCallback(() => {
     setUserInput('');
     setErrors(0);
     setWpm(0);
     setAccuracy(100);
     setIsActive(false);
     setStartTime(null);
-  };
+  }, []);
 
-  const nextPhrase = () => {
-    if (currentPhraseIndex < phrases.length - 1) {
-      setCurrentPhraseIndex(prev => prev + 1);
-      setUserInput('');
-      setErrors(0);
-      setIsActive(false);
-      setStartTime(null);
-    } else {
-      // Lesson completed
-      onStatsUpdate({
-        wpm,
-        accuracy,
-        lessonsCompleted: lessonId + 1,
-        totalTime: startTime ? (Date.now() - startTime) / 1000 : 0
-      });
-      onBack();
-    }
-  };
-
-  const isCompleted = userInput.length >= currentPhrase.length;
-  const progress = (userInput.length / currentPhrase.length) * 100;
+  // Remove duplicate declarations
 
   const renderText = () => {
     return currentPhrase.split('').map((char, index) => {
@@ -150,14 +274,18 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
       
       return (
         <span key={index} className={className + ' px-1 py-0.5 rounded'}>
-          {char === ' ' ? '␣' : char}
+          {char === ' ' ? '\u00A0' : char}
         </span>
       );
     });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100">
+    <div 
+      id="typing-container" 
+      className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 outline-none"
+      tabIndex={0}
+    >
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-sm border-b border-purple-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4">
@@ -196,7 +324,6 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
         {/* Lesson Info */}
         <Card className="mb-8 p-6 bg-white/80 backdrop-blur-sm border-purple-200">
           <div className="text-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">{lesson.title}</h2>
             <p className="text-gray-600">{lesson.description}</p>
           </div>
           
@@ -204,7 +331,11 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
           
           <div className="flex justify-center space-x-4">
             {!isActive ? (
-              <Button onClick={startLesson} className="bg-green-500 hover:bg-green-600">
+              <Button 
+                onClick={startLesson} 
+                className="bg-green-500 hover:bg-green-600"
+                disabled={isActive}
+              >
                 <Play className="w-4 h-4 mr-2" />
                 Start
               </Button>
@@ -233,11 +364,15 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
             <div className="text-center">
               <div className="inline-flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-2 rounded-lg">
                 <Trophy className="w-5 h-5" />
-                <span className="font-semibold">Great job!</span>
+                <span className="font-semibold">Great job! Press Enter to {currentPhraseIndex < phrases.length - 1 ? 'continue' : 'finish'}</span>
               </div>
               <div className="mt-4">
-                <Button onClick={nextPhrase} className="bg-purple-500 hover:bg-purple-600">
-                  {currentPhraseIndex < phrases.length - 1 ? 'Next Phrase' : 'Complete Lesson'}
+                <Button 
+                  onClick={nextPhrase} 
+                  className="bg-purple-500 hover:bg-purple-600"
+                  autoFocus
+                >
+                  {currentPhraseIndex < phrases.length - 1 ? 'Next Phrase (Enter)' : 'Complete Lesson (Enter)'}
                 </Button>
               </div>
             </div>

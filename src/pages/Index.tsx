@@ -55,7 +55,7 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  TypingAce
+                  Key Quest
                 </h1>
                 <p className="text-sm text-gray-600">Master the Keyboard!</p>
               </div>
@@ -79,8 +79,8 @@ const Index = () => {
         {/* Hero Section */}
         <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
-            Learn to Type Like a
-            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent"> Pro!</span>
+            Learn to 
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent"> Type Like a Pro!</span>
           </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             Master proper finger placement and typing technique while learning fun facts and silly quotes!
