@@ -49,7 +49,7 @@ const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
     const isCurrentFinger = finger === currentFinger;
 
     // Base classes for all keys with a smooth transition
-    let baseClasses = "flex items-center justify-center rounded-lg border-2 transition-all duration-300 font-medium text-sm";
+    const baseClasses = "flex items-center justify-center rounded-lg border-2 transition-all duration-300 font-medium text-sm";
     
     // Custom animation for pressed keys
     if (isPressed) {

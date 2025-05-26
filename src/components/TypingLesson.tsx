@@ -86,6 +86,9 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
     }
   }, []); // No dependencies since we use refs
   
+  // Track if lesson is completed
+  const [isLessonCompleted, setIsLessonCompleted] = React.useState(false);
+
   // Handle moving to next phrase or completing the lesson
   const nextPhrase = React.useCallback(() => {
     if (currentPhraseIndexRef.current < phrases.length - 1) {
@@ -95,8 +98,8 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
         currentPhraseIndexRef.current = nextIndex;
         return nextIndex;
       });
-    } else {
-      // Lesson completed
+    } else if (!isLessonCompleted) {
+      // Mark lesson as completed and update stats
       const stats: LessonStats = {
         wpm: wpm,
         accuracy: accuracy,
@@ -104,9 +107,25 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
         totalTime: startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0
       };
       onStatsUpdate(stats);
+      setIsLessonCompleted(true);
+    }
+  }, [phrases.length, wpm, accuracy, lessonId, onStatsUpdate, isLessonCompleted]);
+
+  // Handle navigation after lesson completion
+  const handleLessonCompleteAction = React.useCallback((action: 'home' | 'next') => {
+    if (action === 'next') {
+      // Navigate to the next lesson
+      const nextLessonId = lessonId + 1;
+      // For now, we'll just go back to the home screen
+      // In a real implementation, you would navigate to the next lesson
+      // For example: history.push(`/lessons/${nextLessonId}`)
+      onBack();
+      // Show a message that next lesson is coming soon
+      alert(`Lesson ${nextLessonId} is coming soon!`);
+    } else {
       onBack();
     }
-  }, [phrases.length, wpm, accuracy, lessonId, onStatsUpdate, onBack]);
+  }, [onBack, lessonId]);
 
   const calculateStats = React.useCallback(() => {
     const currentStartTime = startTimeRef.current;
@@ -219,12 +238,84 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
     }
   }, [currentPhrase, startLesson, nextPhrase]);
 
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent) => handleKeyPress(e);
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [handleKeyPress]);
-  
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isLessonCompleted) {
+          handleLessonCompleteAction('home');
+        } else {
+          onBack();
+        }
+        e.preventDefault();
+      } else if (e.key === 'Enter' && isCompleted) {
+        if (currentPhraseIndex < phrases.length - 1) {
+          nextPhrase();
+        } else if (isLessonCompleted) {
+          handleLessonCompleteAction('next');
+          e.preventDefault();
+        } else {
+          nextPhrase();
+        }
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        setPressedKey(' ');
+        // Directly handle the space key press
+        const expectedChar = currentPhrase[userInput.length];
+        const isCorrect = ' ' === expectedChar;
+        
+        setUserInput(prev => {
+          const newInput = prev + ' ';
+          if (newInput.length >= currentPhrase.length) {
+            setTimeout(() => {
+              if (newInput.length === currentPhrase.length) {
+                nextPhrase();
+              }
+            }, 100);
+          }
+          return newInput;
+        });
+        
+        if (!isCorrect) {
+          setErrors(prev => prev + 1);
+        }
+      } else if (e.key.length === 1) {
+        setPressedKey(e.key);
+        // Directly handle the key press
+        const expectedChar = currentPhrase[userInput.length];
+        const isCorrect = e.key === expectedChar;
+        
+        setUserInput(prev => {
+          const newInput = prev + e.key;
+          if (newInput.length >= currentPhrase.length) {
+            setTimeout(() => {
+              if (newInput.length === currentPhrase.length) {
+                nextPhrase();
+              }
+            }, 100);
+          }
+          return newInput;
+        });
+        
+        if (!isCorrect) {
+          setErrors(prev => prev + 1);
+        }
+      }
+    };
+
+    const handleKeyUp = () => {
+      setPressedKey(undefined);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [onBack, isCompleted, nextPhrase, currentPhraseIndex, phrases.length, lessonId, currentPhrase, userInput, isLessonCompleted, handleLessonCompleteAction]);
+
   // Focus the container on mount for keyboard events
   React.useEffect(() => {
     const container = document.getElementById('typing-container');
@@ -306,13 +397,41 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              <Badge variant="secondary" className="bg-blue-100 text-blue-700">
-                <Zap className="w-4 h-4 mr-1" />
+            <div className="flex items-center space-x-3">
+              <Button 
+                onClick={isActive ? pauseLesson : startLesson} 
+                size="sm"
+                variant={isActive ? "outline" : "default"}
+                className={!isActive ? "bg-green-500 hover:bg-green-600 h-8 px-3" : "h-8 px-3"}
+              >
+                {isActive ? (
+                  <>
+                    <Pause className="w-3.5 h-3.5 mr-1.5" />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 mr-1.5" />
+                    Start
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={restartLesson} 
+                variant="outline" 
+                size="sm"
+                className="h-8 px-3"
+              >
+                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                Restart
+              </Button>
+              <div className="h-8 w-px bg-gray-200 mx-1"></div>
+              <Badge variant="secondary" className="bg-blue-100 text-blue-700 h-7">
+                <Zap className="w-3.5 h-3.5 mr-1" />
                 {wpm} WPM
               </Badge>
-              <Badge variant="secondary" className="bg-green-100 text-green-700">
-                <Target className="w-4 h-4 mr-1" />
+              <Badge variant="secondary" className="bg-green-100 text-green-700 h-7">
+                <Target className="w-3.5 h-3.5 mr-1" />
                 {accuracy}%
               </Badge>
             </div>
@@ -323,60 +442,83 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Lesson Info */}
         <Card className="mb-8 p-6 bg-white/80 backdrop-blur-sm border-purple-200">
-          <div className="text-center mb-4">
-            <p className="text-gray-600">{lesson.description}</p>
-          </div>
-          
-          <Progress value={progress} className="mb-4" />
-          
-          <div className="flex justify-center space-x-4">
-            {!isActive ? (
-              <Button 
-                onClick={startLesson} 
-                className="bg-green-500 hover:bg-green-600"
-                disabled={isActive}
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Start
-              </Button>
-            ) : (
-              <Button onClick={pauseLesson} variant="outline">
-                <Pause className="w-4 h-4 mr-2" />
-                Pause
-              </Button>
-            )}
-            <Button onClick={restartLesson} variant="outline">
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Restart
-            </Button>
+          <div className="text-center">
+            <p className="text-gray-600">
+              <span className="font-bold text-blue-800">◎ Lesson Goal: </span>
+              {lesson.description}
+            </p>
           </div>
         </Card>
 
+        {/* Completion Modal */}
+        {isCompleted && isLessonCompleted && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="animate-in fade-in-90 zoom-in-90 duration-200 w-full max-w-2xl">
+              <Card className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-100 shadow-2xl">
+                <div className="p-8">
+                  <div className="text-center">
+                    <div className="inline-flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-3 rounded-lg mb-4">
+                      <Trophy className="w-5 h-5" />
+                      <span className="font-semibold">🎉 Lesson Complete!</span>
+                    </div>
+                    
+                    {lesson.funFact && (
+                      <div className="relative p-0.5 bg-gradient-to-r from-purple-400 via-blue-500 to-purple-400 bg-[length:200%_auto] rounded-lg mb-6 animate-gradient-border">
+                        <div className="bg-white/50 backdrop-blur-sm text-blue-800 p-4 rounded-lg text-left">
+                          <h4 className="font-medium text-blue-800 mb-1">💡 Did you know?</h4>
+                          <p className="text-blue-700">{lesson.funFact}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-col sm:flex-row justify-center gap-4 mt-6">
+                      <Button
+                        onClick={onBack}
+                        variant="outline"
+                        className="h-12 px-6 text-base"
+                        autoFocus
+                      >
+                        <span>Home <span className="text-gray-600 font-normal">(Esc)</span></span>
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          // Here you would typically navigate to the next lesson
+                          // For now, we'll just go back to the home screen
+                          onBack();
+                        }}
+                        className="h-12 px-6 text-base bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+                      >
+                        <span>Next Lesson <span className="text-purple-100 font-normal">(Enter)</span></span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
         {/* Typing Area */}
         <Card className="mb-8 p-8 bg-white/80 backdrop-blur-sm border-purple-200">
+
           <div className="text-center mb-6">
             <div className="font-mono leading-relaxed bg-gray-50 p-6 rounded-lg border-2 border-dashed border-gray-300 min-h-[120px] flex items-center justify-center">
               {renderText()}
             </div>
           </div>
           
-          {isCompleted && (
-            <div className="text-center">
-              <div className="inline-flex items-center space-x-2 bg-green-100 text-green-800 px-4 py-2 rounded-lg">
-                <Trophy className="w-5 h-5" />
-                <span className="font-semibold">Great job! Press Enter to {currentPhraseIndex < phrases.length - 1 ? 'continue' : 'finish'}</span>
-              </div>
-              <div className="mt-4">
-                <Button 
-                  onClick={nextPhrase} 
-                  className="bg-purple-500 hover:bg-purple-600"
-                  autoFocus
-                >
-                  {currentPhraseIndex < phrases.length - 1 ? 'Next Phrase (Enter)' : 'Complete Lesson (Enter)'}
-                </Button>
-              </div>
+          {/* Progress Bar */}
+          <div className="mt-6">
+            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-gray-200">
+              <div 
+                className="h-full w-full flex-1 transition-all"
+                style={{
+                  background: 'linear-gradient(90deg, #8b5cf6 0%, #3b82f6 50%, #10b981 100%)',
+                  transform: `translateX(-${100 - progress}%)`
+                }}
+              />
             </div>
-          )}
+          </div>
         </Card>
 
         {/* Virtual Keyboard */}
@@ -385,14 +527,6 @@ const TypingLesson: React.FC<TypingLessonProps> = ({ lessonId, onBack, onStatsUp
           currentFinger=""
           pressedKey={pressedKey}
         />
-
-        {/* Fun Fact */}
-        {lesson.funFact && (
-          <Card className="mt-8 p-6 bg-gradient-to-r from-purple-100 to-blue-100 border-purple-200">
-            <h3 className="text-lg font-semibold text-purple-800 mb-2">💡 Fun Fact!</h3>
-            <p className="text-purple-700">{lesson.funFact}</p>
-          </Card>
-        )}
       </div>
     </div>
   );
