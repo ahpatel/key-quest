@@ -9,6 +9,7 @@ import VirtualKeyboard from '@/components/VirtualKeyboard';
 import TypingLesson from '@/components/TypingLesson';
 import HandPositionGuide from '@/components/HandPositionGuide';
 import LessonSelector from '@/components/LessonSelector';
+import Typewriter from '@/components/Typewriter';
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<'home' | 'lesson' | 'guide'>('home');
@@ -78,9 +79,13 @@ const Index = () => {
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Hero Section */}
         <div className="text-center mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4">
-            Learn to 
-            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent"> Type Like a Pro!</span>
+          <h2 className="text-5xl md:text-4xl font-bold text-gray-800 mb-4">
+            Learn to   
+            <Typewriter 
+              text={"\u00A0Type Like a Pro!"} 
+              className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent"
+              cursorClassName="text-purple-400"
+            />
           </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             Master proper finger placement and typing technique while learning fun facts and silly quotes!
